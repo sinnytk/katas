@@ -10,9 +10,9 @@ def test_copies_file_to_other_directory(tmp_path: Path):
     host_dir = tmp_path / "host"
     host_dir.mkdir()
 
-    (host_dir / "virus1.txt").touch()
-    (host_dir / "virus2.txt").touch()
-    (host_dir / "virus3.txt").touch()
+    (host_dir / "virus1.txt").write_text("alpha")
+    (host_dir / "virus2.txt").write_text("beta")
+    (host_dir / "virus3.txt").write_text("gamma")
 
     ## target
     target_dir = tmp_path / "target"
@@ -57,3 +57,31 @@ def test_removes_files_that_are_not_in_source(tmp_path: Path):
     # fool should not have any attachments anymore
     assert not (fool_dir / "attachment1.txt").exists()
     assert not (fool_dir / "attachment2.txt").exists()
+
+
+def test_renames_files_in_dest_if_content_same(tmp_path: Path):
+    """If a file exists in destination with same content but different name, rename it to match source"""
+
+    # > trainer
+    #   > strength.txt
+    trainer_dir = tmp_path / "trainer"
+    trainer_dir.mkdir()
+    (trainer_dir / "strength.txt").write_text("foo1")
+
+    # > novice
+    #   > potential.txt
+    novice_dir = tmp_path / "novice"
+    novice_dir.mkdir()
+    (novice_dir / "potential.txt").write_text("foo1")
+
+    # training begins!
+    # 💪🏋️🥋
+    sync(trainer_dir, novice_dir)
+    # 💪🏋️🥋
+
+    # original file doesn't exist anymore
+    assert not (novice_dir / "potential.txt").exists()
+    # renamed file exists
+    assert (novice_dir / "strength.txt").exists()
+    # assert content not changed!
+    assert (novice_dir / "strength.txt").read_text() == "foo1"
