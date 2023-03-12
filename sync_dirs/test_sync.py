@@ -1,87 +1,71 @@
 """Test sync syncs"""
 from pathlib import Path
 
-from sync import sync
+from sync import prepare_operations
 
 
-def test_copies_file_to_other_directory(tmp_path: Path):
+def test_if_directories_are_synced_no_operations():
+    """If both directories are same, there shouldn't be any operations to perform"""
+    src_dir_map = {"somehash": "file1.txt"}
+    dst_dir_map = {"somehash": "file1.txt"}
+
+    assert [] == prepare_operations(src_dir_map, dst_dir_map, Path("src"), Path("dst"))
+
+
+def test_copies_file_to_other_directory():
     """sync should copy files from one directory to other"""
-    # setup
-    host_dir = tmp_path / "host"
-    host_dir.mkdir()
 
-    (host_dir / "virus1.txt").write_text("alpha")
-    (host_dir / "virus2.txt").write_text("beta")
-    (host_dir / "virus3.txt").write_text("gamma")
+    host_dir_map = {"alpha": "virus1.txt", "beta": "virus2.txt", "gamma": "virus3.txt"}
+    target_dir_map = {}
 
-    ## target
-    target_dir = tmp_path / "target"
-    target_dir.mkdir()
+    excepted_operations = [
+        ["COPY", Path("host/virus1.txt"), Path("target/virus1.txt")],
+        ["COPY", Path("host/virus2.txt"), Path("target/virus2.txt")],
+        ["COPY", Path("host/virus3.txt"), Path("target/virus3.txt")],
+    ]
 
-    # before, the directories are out of sync (bc target doesn't have virus)
-    assert not (target_dir / "virus1.txt").exists()
-    assert not (target_dir / "virus2.txt").exists()
-    assert not (target_dir / "virus3.txt").exists()
-
-    # ✨✨✨
-    sync(host_dir, target_dir)
-    # ✨✨✨
-
-    assert (target_dir / "virus1.txt").exists()
-    assert (target_dir / "virus2.txt").exists()
-    assert (target_dir / "virus3.txt").exists()
+    assert excepted_operations == prepare_operations(
+        host_dir_map, target_dir_map, Path("host"), Path("target")
+    )
 
 
-def test_removes_files_that_are_not_in_source(tmp_path: Path):
+def test_removes_files_that_are_not_in_source():
     """If a file exists in destination but not in source, it should be removed"""
 
     # > monk
-    monk_dir = tmp_path / "monk"
-    monk_dir.mkdir()
+    monk_dir_map = {}
 
     # > fool
     #   > attachment1.txt
     #   > attachment2.txt
-    fool_dir = tmp_path / "fool"
-    fool_dir.mkdir()
-    (fool_dir / "attachment1.txt").touch()
-    (fool_dir / "attachment2.txt").touch()
+    fool_dir_map = {"foo": "attachment1.txt", "bar": "attachment2.txt"}
 
-    # fool discovers attachments through introspection
-    assert (fool_dir / "attachment1.txt").exists()
-    assert (fool_dir / "attachment2.txt").exists()
-
-    # monk trains fool
-    sync(monk_dir, fool_dir)
-
-    # fool should not have any attachments anymore
-    assert not (fool_dir / "attachment1.txt").exists()
-    assert not (fool_dir / "attachment2.txt").exists()
+    # all of fool's attachements should be removed
+    expected_operations = [
+        ["DELETE", Path("fool/attachment1.txt")],
+        ["DELETE", Path("fool/attachment2.txt")],
+    ]
+    assert expected_operations == prepare_operations(
+        monk_dir_map, fool_dir_map, Path("monk"), Path("fool")
+    )
 
 
-def test_renames_files_in_dest_if_content_same(tmp_path: Path):
+def test_renames_files_in_dest_if_content_same():
     """If a file exists in destination with same content but different name, rename it to match source"""
 
     # > trainer
     #   > strength.txt
-    trainer_dir = tmp_path / "trainer"
-    trainer_dir.mkdir()
-    (trainer_dir / "strength.txt").write_text("foo1")
+    trainer_dir_map = {"foo1": "strength.txt"}
 
     # > novice
     #   > potential.txt
-    novice_dir = tmp_path / "novice"
-    novice_dir.mkdir()
-    (novice_dir / "potential.txt").write_text("foo1")
+    novice_dir_map = {"foo1": "potential.txt"}  # same hash (foo1), but different name
 
-    # training begins!
-    # 💪🏋️🥋
-    sync(trainer_dir, novice_dir)
-    # 💪🏋️🥋
+    # after training, novice's potential is now strength
+    expected_operations = [
+        ["RENAME", Path("novice/potential.txt"), Path("novice/strength.txt")]
+    ]
 
-    # original file doesn't exist anymore
-    assert not (novice_dir / "potential.txt").exists()
-    # renamed file exists
-    assert (novice_dir / "strength.txt").exists()
-    # assert content not changed!
-    assert (novice_dir / "strength.txt").read_text() == "foo1"
+    assert expected_operations == prepare_operations(
+        trainer_dir_map, novice_dir_map, Path("trainer"), Path("novice")
+    )
